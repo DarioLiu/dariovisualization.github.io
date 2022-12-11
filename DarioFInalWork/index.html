@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+
+    <script src="./js/d3.v7.min.js"></script>
+    <script src="./js/util.js"></script>
+    <link rel="stylesheet" href="./style.css">
+</head>
+
+<body>
+    <div class="heading">
+        <h1>The Vaccination Progress Map Around World</h1>
+    </div>
+
+    <body>
+        <div id="presentation">
+            <div id="mapbox">
+                <div id="compo">
+                    <div id="compo-year">
+                        <div id="label">Select Year: </div>
+                        <select id="select-year"></select>
+                    </div>
+
+                    <div id="compo-vac">
+                        <div id="label">Select Vaccine: </div>
+                        <select id="select-vac"></select>
+                    </div>
+
+                    <div id="compo-month">
+                        <div id="label"> Select Month: </div>
+                        <input id="select-month" type="range" min="1" max="13" value="1" />
+                        <output id="show-month" for="select-month">1</output>
+                    </div>
+                </div>
+
+
+                <svg id="svg-container">
+                    <g id="legend"></g>
+                </svg>
+            </div>
+            <div id="description">
+                <h2>The Fact about Covid Vaccine Progress</h2>
+                <p>COVID-19 is an infactious disease caused by the SARS-CoV-2, and 
+                    the World has already been suffering from the COVID-19 for 3 years. There is no way to know how 
+                    COVID-19 will affact people. With infection, most people have a mild case, but it can still casse
+                    serious illness and death. Up to 2022, there are 6,657,196 around the world people died from COVID-19.
+                    
+                    However, What ahout vaccination? Up to now, there are 11 types of vacciations are available around the world.
+                    Different countries have their preferred type of vaccinations, so I did this project to investigate the worldwide
+                    vaccination progress based on the type of the vaccination. 
+                    
+                </p>
+                <div id="music">
+                    <audio controls autoplay hidden="hidden" >
+                        <source src="./Dario's-Song-Official-V-1.0.mp3" type="audio/mpeg">
+                    </audio>
+                </div>
+            </div>
+           
+        </div>
+
+        <script>
+            config = {
+                svgWidth: 550,
+                svgHeight: 550,
+                figLeftMargin: 0,
+
+                figTopMargin: 0,
+                earthWidth: 555,
+                earthHeight: 550,
+            };
+
+            svgContainer = d3.select("#svg-container")
+                .attr("width", config.svgWidth)
+                .attr("height", config.svgHeight);
+
+            // 
+            let legend = d3.select("#legend")
+                .attr("transform", `translate(20, ${config.svgHeight - 150})`)
+                .call(legend => {
+                    legend.append("text").text("Vaccinated Population").attr('y', -16)
+                })
+                .selectAll()
+                .data([0, 1, 2, 3, 4])
+                .enter()
+                .append("g")
+                .attr("transform", d => `translate(0, ${d * 30})`)
+                .call(legend => {
+                    legend
+                        .append("rect")
+                        .attr("width", 20)
+                        .attr("height", 20)
+
+                    legend
+                        .append("text")
+                        .attr("x", 30)
+                        .attr("y", 16)
+                })
+
+            let selectVacs = d3.select("#select-vac");
+            let selectYear = d3.select("#select-year");
+            let selectMonth = d3.select("#select-month");
+
+            let maxYear;
+            let showMonth = d3.select("#show-month");
+            let showYear = d3.select("#show-year");
+
+            ////////////////
+            let allYearData; // 所有年份的数据
+            let locationToSum; // 某年某月下各地区-疫苗接种总数
+
+            let countryFigSels;
+
+            let vacTypeToColor = d3.scaleOrdinal()
+                .range(d3.schemeSet3);
+
+            function updateContryFig() {
+                let vacType = selectVacs.node().value;
+
+                let vacColor = vacTypeToColor(vacType)
+
+                let numberToColor = makeNumberToColor(locationToSum, vacColor);
+
+                countryFigSels /// For loop color change based on the number change
+                    .attr("fill", d => {
+                        console.log('_fig_location', d._fig_location, numberToColor(locationToSum[d._fig_location]))
+                        return numberToColor(locationToSum[d._fig_location])
+                    })
+
+
+                let locValues = Object.values(locationToSum).sort((a, b) => a - b);
+                let minLocation = locValues[0];
+                let maxLocation = locValues[locValues.length - 1];
+                let trans = d3.scaleLinear()
+                    .domain([0, 5])
+                    .range([minLocation, maxLocation]);
+
+                console.log('all country: ', locationToSum)
+
+                legend
+                    .selectAll("rect")
+                    .attr("fill", d => numberToColor(trans(d)))
+
+                legend
+                    .selectAll('text')
+                    .text(d => {
+                        let t1 = trans(d - 1);
+                        t1 = t1 < 0 ? 0 : t1;
+                        let t2 = trans(d);
+
+                        if (isNaN(t1))
+                            return undefined
+                        else
+                            return d3.formatPrefix(',.1', 1e3)(t1) + '~' + d3.formatPrefix(',.1', 1e3)(t2);
+                    })
+            }
+
+
+            function updateSelectedData() {
+                const yearValue = selectYear.node().value;
+                const vacValue = selectVacs.node().value;
+                const monthValue = selectMonth.node().value;
+
+                showMonth.text(monthValue);
+                showYear.text(yearValue);
+
+                let filterYear;
+                if (yearValue === 'Years') {
+                    filterYear = (e) => true;
+                } // 所有年份 == Years
+                else {
+                    filterYear = e => e['date'].slice(0, 4) === yearValue;
+                }
+
+                let filterMonth;
+                if (+monthValue === 13) {
+                    filterMonth = (e) => true;
+                    showMonth.text("AllYears")
+                } // 全年 == AllYears
+                else {
+                    filterMonth = row => +row['date'].slice(5, 7) === +monthValue;
+                }
+
+                let filterVacType;
+                if (vacValue === 'AllVac') {
+                    filterVacType = (e) => true
+                } // 所有疫苗 == AllVac
+                else {
+                    filterVacType = row => row["vaccine"] === vacValue;
+                }
+
+                let selectedData = allYearData.filter(row =>
+                    filterYear(row) && filterMonth(row) && filterVacType(row)
+                );
+
+                locationToSum = calcLocationToData(selectedData);
+            }
+
+            [selectYear, selectVacs, selectMonth]
+                .forEach(e => e.on("change", () => {
+                    updateSelectedData();
+                    updateContryFig();
+                }))
+
+            d3.json("./data/data_set.json")
+                .then(data => {
+                    allYearData = data;
+
+                    let vacType = new Set(['AllVac', ...data.map(e => e["vaccine"])]); //所有疫苗 = AllVac
+                    appendOptionToSelect(selectVacs, vacType);
+                    vacTypeToColor.domain(vacType);
+
+                    let allYears = new Set(data.map(e => +e["date"].slice(0, 4)));
+                    allYears.add("Years") // 所有年份 == Years
+                    appendOptionToSelect(selectYear, allYears)
+
+                    d3.json("./data/GeoChart.world.geo.json")
+                        .then(mapData => {
+                            const projection = d3.geoOrthographic()
+                                .fitExtent([[0, 0], [config.earthWidth, config.earthHeight]], mapData)
+                                .rotate([0, 0, 0])
+                                .scale(300)
+
+                            const geoGenerator = d3.geoPath()
+                                .projection(projection);
+
+                            svgContainer.append("g")
+                                .attr('transform', `translate(${config.figLeftMargin}, ${config.figTopMargin})`)
+
+                            countryFigSels = svgContainer
+                                .append("g")
+                                .attr('transform', `translate(${config.figLeftMargin}, ${config.figTopMargin})`)
+                                .selectAll("NONE")
+                                .data(mapData.features)
+                                .enter()
+                                .append("path")
+                                .each(d => {
+                                    d['_fig_location'] = d['properties']['sovereignt'];
+                                    d['_fig_center'] = [d['properties']['label_x'], d['properties']['label_y']];
+                                })
+                                .attr("d", p => geoGenerator(p));
+
+                            countryFigSels
+                                .call(makeHover(location => locationToSum[location]));
+
+                            svgContainer
+                                .call(makeRotate(projection, geoGenerator, countryFigSels));
+
+                            updateSelectedData()
+                            updateContryFig()
+                        })
+
+                })
+        </script>
+        
+    </body>
+    <footer>
+        <p id="footercredit">@2022 Credit by Dario Liu</p>
+    </footer>
+
+</html>
